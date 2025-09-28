@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Panel - Sylhetpedia</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; background: #FFF5F5; margin: 0; padding: 0; }
+        .container { max-width: 900px; margin: 32px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 8px #eee; padding: 24px; }
+        h2 { color: #7B1F1F; }
+        .module-btn { margin: 0 8px 16px 0; padding: 8px 18px; border: none; border-radius: 6px; background: #7B1F1F; color: #fff; cursor: pointer; }
+        .module-btn.active { background: #388E3C; }
+        .card { border: 1px solid #7B1F1F; border-radius: 10px; margin-bottom: 16px; padding: 12px; }
+        .btn { background: #7B1F1F; color: #fff; border: none; border-radius: 6px; padding: 6px 16px; margin-right: 8px; cursor: pointer; }
+        .btn.decline { background: #E53935; }
+        .btn.delete { background: #B71C1C; }
+        .row { margin-bottom: 6px; }
+        .login-box, .signup-box { max-width: 400px; margin: 80px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 8px #eee; padding: 32px; }
+        .login-box input, .signup-box input { width: 100%; margin-bottom: 16px; padding: 10px; border: 1px solid #7B1F1F; border-radius: 6px; }
+        .login-box button, .signup-box button { width: 100%; background: #7B1F1F; color: #fff; border: none; border-radius: 6px; padding: 10px; font-size: 16px; }
+        .logout-btn { float: right; background: #E53935; color: #fff; border: none; border-radius: 6px; padding: 6px 16px; margin-bottom: 16px; cursor: pointer; }
+        .switch-link { color: #388E3C; cursor: pointer; text-decoration: underline; font-size: 14px; }
+    </style>
+</head>
+<body>
+<div id="loginSection" class="login-box" style="display:none;">
+    <h2>Admin Login</h2>
+    <input type="text" id="adminUsername" placeholder="Admin Username">
+    <input type="password" id="adminPassword" placeholder="Password">
+    <button onclick="adminLogin()">Login</button>
+    <div id="loginError" style="color:#E53935; margin-top:10px;"></div>
+    <div style="margin-top:16px; text-align:center;">
+        <span class="switch-link" onclick="showSignup()">Don't have an account? Signup</span>
+    </div>
+</div>
+<div id="signupSection" class="signup-box" style="display:none;">
+    <h2>Admin Signup</h2>
+    <input type="email" id="signupEmail" placeholder="Admin Email">
+    <input type="text" id="signupUsername" placeholder="Admin Username">
+    <input type="password" id="signupPassword" placeholder="Password">
+    <button onclick="adminSignup()">Signup</button>
+    <div id="signupError" style="color:#E53935; margin-top:10px;"></div>
+    <div style="margin-top:16px; text-align:center;">
+        <span class="switch-link" onclick="showLogin()">Already have an account? Login</span>
+    </div>
+</div>
+<div id="panelSection" class="container" style="display:none;">
+    <button class="logout-btn" onclick="adminLogout()">Logout</button>
+    <h2 id="moduleTitle">Blood Donation</h2>
+    <div>
+        <button class="module-btn active" onclick="switchModule('blood')">Blood</button>
+        <button class="module-btn" onclick="switchModule('rent')">Rent</button>
+        <button class="module-btn" onclick="switchModule('tutor')">Tutor</button>
+        <button class="module-btn" onclick="switchModule('lost')">Lost Item</button>
+        <button class="module-btn" onclick="switchModule('found')">Found Item</button>
+        <button class="module-btn" onclick="switchModule('patient')">Patient Request</button>
+    </div>
+    <h3>Pending List</h3>
+    <div id="pendingList"></div>
+    <h3>Approved List</h3>
+    <div id="approvedList"></div>
+</div>
+<script>
+const BASE_URL = "https://sylhetpedia-backend2025-2.onrender.com";
+let token = localStorage.getItem("adminToken") || "";
+let currentModule = "blood";
+
+function showLogin() {
+    document.getElementById("loginSection").style.display = "block";
+    document.getElementById("signupSection").style.display = "none";
+    document.getElementById("panelSection").style.display = "none";
+}
+function showSignup() {
+    document.getElementById("loginSection").style.display = "none";
+    document.getElementById("signupSection").style.display = "block";
+    document.getElementById("panelSection").style.display = "none";
+}
+function showPanel() {
+    document.getElementById("loginSection").style.display = "none";
+    document.getElementById("signupSection").style.display = "none";
+    document.getElementById("panelSection").style.display = "block";
+}
+
+function adminLogin() {
+    const username = document.getElementById("adminUsername").value.trim();
+    const password = document.getElementById("adminPassword").value.trim();
+    document.getElementById("loginError").innerText = "";
+    fetch(`${BASE_URL}/api/auth/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username, password: password })
+    })
+    .then(res => {
+        if (!res.ok) throw new Error("Invalid credentials or not admin");
+        return res.json();
+    })
+    .then(data => {
+        token = data.accessToken;
+        localStorage.setItem("adminToken", token);
+        showPanel();
+        fetchPending();
+        fetchApproved();
+    })
+    .catch(err => {
+        document.getElementById("loginError").innerText = "Login failed: " + err.message;
+    });
+}
+
+function adminSignup() {
+    const email = document.getElementById("signupEmail").value.trim();
+    const username = document.getElementById("signupUsername").value.trim();
+    const password = document.getElementById("signupPassword").value.trim();
+    document.getElementById("signupError").innerText = "";
+    fetch(`${BASE_URL}/api/auth/admin/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email, username: username, password: password })
+    })
+    .then(res => {
+        if (!res.ok) throw new Error("Signup failed or not allowed");
+        return res.json();
+    })
+    .then(data => {
+        if (data.success) {
+            alert("Signup successful! Please login.");
+            showLogin();
+        } else {
+            document.getElementById("signupError").innerText = data.message || "Signup failed";
+        }
+    })
+    .catch(err => {
+        document.getElementById("signupError").innerText = "Signup failed: " + err.message;
+    });
+}
+
+function adminLogout() {
+    localStorage.removeItem("adminToken");
+    token = "";
+    showLogin();
+}
+
+function switchModule(module) {
+    currentModule = module;
+    document.querySelectorAll('.module-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelector(`.module-btn[onclick*="${module}"]`).classList.add('active');
+    document.getElementById("moduleTitle").innerText =
+        module === "blood" ? "Blood Donation" :
+        module === "rent" ? "Rent" :
+        module === "tutor" ? "Tutor" :
+        module === "lost" ? "Lost Item" :
+        module === "found" ? "Found Item" :
+        "Patient Request";
+    fetchPending();
+    fetchApproved();
+}
+
+function getApiBase() {
+    if (currentModule === "blood") return "donors";
+    if (currentModule === "rent") return "rent-houses";
+    if (currentModule === "tutor") return "tutor";
+    if (currentModule === "lost") return "lostitem";
+    if (currentModule === "found") return "founditem";
+    if (currentModule === "patient") return "patients/requests";
+    return "";
+}
+
+function fetchPending() {
+    const api = getApiBase();
+    fetch(`${BASE_URL}/api/${api}/pending`, {
+        headers: { "Authorization": "Bearer " + token }
+    })
+    .then(res => res.json())
+    .then(data => {
+        const pendingList = document.getElementById("pendingList");
+        pendingList.innerHTML = "";
+        data.forEach(item => {
+            let info = "";
+            if (currentModule === "blood") {
+                info = `<div class="row"><b>Name:</b> ${item.name}</div>
+                        <div class="row"><b>Blood Group:</b> ${item.bloodGroup}</div>
+                        <div class="row"><b>Gender:</b> ${item.gender || ""}</div>
+                        <div class="row"><b>Age:</b> ${item.age || ""}</div>
+                        <div class="row"><b>Contact:</b> ${item.contact}</div>
+                        <div class="row"><b>User:</b> ${item.userId}</div>`;
+            } else if (currentModule === "rent") {
+                info = `<div class="row"><b>Location:</b> ${item.location}</div>
+                        <div class="row"><b>Rent:</b> ${item.rent}</div>
+                        <div class="row"><b>Bedrooms:</b> ${item.bedrooms}</div>
+                        <div class="row"><b>Dining:</b> ${item.dinningRoom}</div>
+                        <div class="row"><b>Drawing:</b> ${item.drawingRoom}</div>
+                        <div class="row"><b>Balcony:</b> ${item.balcony}</div>
+                        <div class="row"><b>Details:</b> ${item.additionalDetails}</div>
+                        <div class="row"><b>Contact:</b> ${item.contact}</div>
+                        <div class="row"><b>Available:</b> ${item.availableDate}</div>
+                        <div class="row"><b>Furnished:</b> ${item.furnished}</div>
+                        <div class="row"><b>User:</b> ${item.userId}</div>`;
+            } else if (currentModule === "tutor") {
+                info = `<div class="row"><b>Class Level:</b> ${item.standard}</div>
+                        <div class="row"><b>Salary:</b> ${item.salary}</div>
+                        <div class="row"><b>Gender:</b> ${item.studentGender}</div>
+                        <div class="row"><b>Duration:</b> ${item.duration}</div>
+                        <div class="row"><b>Version:</b> ${item.version}</div>
+                        <div class="row"><b>School:</b> ${item.schoolCollege}</div>
+                        <div class="row"><b>Contact:</b> ${item.contact}</div>
+                        <div class="row"><b>Location:</b> ${item.location}</div>
+                        <div class="row"><b>Days:</b> ${item.days}</div>
+                        <div class="row"><b>User:</b> ${item.userId}</div>`;
+            } else if (currentModule === "lost") {
+                info = `<div class="row"><b>Item:</b> ${item.itemName}</div>
+                        <div class="row"><b>Description:</b> ${item.description}</div>
+                        <div class="row"><b>Location:</b> ${item.location}</div>
+                        <div class="row"><b>Date:</b> ${item.date || ""}</div>
+                        <div class="row"><b>Time:</b> ${item.time || ""}</div>
+                        <div class="row"><b>Contact:</b> ${item.contact}</div>
+                        <div class="row"><b>User:</b> ${item.userId}</div>`;
+            } else if (currentModule === "found") {
+                info = `<div class="row"><b>Item:</b> ${item.itemName}</div>
+                        <div class="row"><b>Description:</b> ${item.description}</div>
+                        <div class="row"><b>Location:</b> ${item.location}</div>
+                        <div class="row"><b>Date:</b> ${item.date || ""}</div>
+                        <div class="row"><b>Time:</b> ${item.time || ""}</div>
+                        <div class="row"><b>Contact:</b> ${item.contact}</div>
+                        <div class="row"><b>User:</b> ${item.userId}</div>`;
+            } else if (currentModule === "patient") {
+                info = `<div class="row"><b>Name:</b> ${item.name || "N/A"}</div>
+                        <div class="row"><b>Contact:</b> ${item.contact || "N/A"}</div>
+                        <div class="row"><b>Blood Group:</b> ${item.bloodGroup || ""}</div>
+                        <div class="row"><b>Location:</b> ${item.location || ""}</div>
+                        <div class="row"><b>User:</b> ${item.userId || ""}</div>`;
+            }
+            const card = document.createElement("div");
+            card.className = "card";
+            card.innerHTML = `
+                ${info}
+                <button class="btn" onclick="approve(${item.id})">Approve</button>
+                <button class="btn decline" onclick="decline(${item.id})">Decline</button>
+            `;
+            pendingList.appendChild(card);
+        });
+    });
+}
+
+function fetchApproved() {
+    const api = getApiBase();
+    fetch(`${BASE_URL}/api/${api}/approved`, {
+        headers: { "Authorization": "Bearer " + token }
+    })
+    .then(res => res.json())
+    .then(data => {
+        const approvedList = document.getElementById("approvedList");
+        approvedList.innerHTML = "";
+        data.forEach(item => {
+            let info = "";
+            if (currentModule === "blood") {
+                info = `<div class="row"><b>Name:</b> ${item.name}</div>
+                        <div class="row"><b>Blood Group:</b> ${item.bloodGroup}</div>
+                        <div class="row"><b>Gender:</b> ${item.gender || ""}</div>
+                        <div class="row"><b>Age:</b> ${item.age || ""}</div>
+                        <div class="row"><b>Contact:</b> ${item.contact}</div>
+                        <div class="row"><b>User:</b> ${item.userId}</div>`;
+            } else if (currentModule === "rent") {
+                info = `<div class="row"><b>Location:</b> ${item.location}</div>
+                        <div class="row"><b>Rent:</b> ${item.rent}</div>
+                        <div class="row"><b>Bedrooms:</b> ${item.bedrooms}</div>
+                        <div class="row"><b>Dining:</b> ${item.dinningRoom}</div>
+                        <div class="row"><b>Drawing:</b> ${item.drawingRoom}</div>
+                        <div class="row"><b>Balcony:</b> ${item.balcony}</div>
+                        <div class="row"><b>Details:</b> ${item.additionalDetails}</div>
+                        <div class="row"><b>Contact:</b> ${item.contact}</div>
+                        <div class="row"><b>Available:</b> ${item.availableDate}</div>
+                        <div class="row"><b>Furnished:</b> ${item.furnished}</div>
+                        <div class="row"><b>User:</b> ${item.userId}</div>`;
+            } else if (currentModule === "tutor") {
+                info = `<div class="row"><b>Class Level:</b> ${item.standard}</div>
+                        <div class="row"><b>Salary:</b> ${item.salary}</div>
+                        <div class="row"><b>Gender:</b> ${item.studentGender}</div>
+                        <div class="row"><b>Duration:</b> ${item.duration}</div>
+                        <div class="row"><b>Version:</b> ${item.version}</div>
+                        <div class="row"><b>School:</b> ${item.schoolCollege}</div>
+                        <div class="row"><b>Contact:</b> ${item.contact}</div>
+                        <div class="row"><b>Location:</b> ${item.location}</div>
+                        <div class="row"><b>Days:</b> ${item.days}</div>
+                        <div class="row"><b>User:</b> ${item.userId}</div>`;
+            } else if (currentModule === "lost") {
+                info = `<div class="row"><b>Item:</b> ${item.item}</div>
+                        <div class="row"><b>Description:</b> ${item.description}</div>
+                        <div class="row"><b>Location:</b> ${item.location}</div>
+                        <div class="row"><b>Date:</b> ${item.dateLost || ""}</div>
+                        <div class="row"><b>Time:</b> ${item.timelost || ""}</div>
+                        <div class="row"><b>Contact:</b> ${item.contact}</div>
+                        <div class="row"><b>User:</b> ${item.userId}</div>`;
+            } else if (currentModule === "found") {
+                info = `<div class="row"><b>Item:</b> ${item.itemName}</div>
+                        <div class="row"><b>Description:</b> ${item.description}</div>
+                        <div class="row"><b>Location:</b> ${item.location}</div>
+                        <div class="row"><b>Date:</b> ${item.date || ""}</div>
+                        <div class="row"><b>Time:</b> ${item.time || ""}</div>
+                        <div class="row"><b>Contact:</b> ${item.contact}</div>
+                        <div class="row"><b>User:</b> ${item.userId}</div>`;
+            } else if (currentModule === "patient") {
+                info = `<div class="row"><b>Name:</b> ${item.name || "N/A"}</div>
+                        <div class="row"><b>Contact:</b> ${item.contact || "N/A"}</div>
+                        <div class="row"><b>Blood Group:</b> ${item.bloodGroup || ""}</div>
+                        <div class="row"><b>Location:</b> ${item.location || ""}</div>
+                        <div class="row"><b>User:</b> ${item.userId || ""}</div>`;
+            }
+            const card = document.createElement("div");
+            card.className = "card";
+            card.innerHTML = `
+                ${info}
+                <button class="btn delete" onclick="deleteItem(${item.id})">Delete</button>
+            `;
+            approvedList.appendChild(card);
+        });
+    });
+}
+
+function approve(id) {
+    const api = getApiBase();
+    fetch(`${BASE_URL}/api/${api}/approve/${id}`, {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + token }
+    }).then(() => { fetchPending(); fetchApproved(); });
+}
+
+function decline(id) {
+    const api = getApiBase();
+    fetch(`${BASE_URL}/api/${api}/decline/${id}`, {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + token }
+    }).then(() => fetchPending());
+}
+
+function deleteItem(id) {
+    const api = getApiBase();
+    fetch(`${BASE_URL}/api/${api}/delete/${id}`, {
+        method: "DELETE",
+        headers: { "Authorization": "Bearer " + token }
+    }).then(() => fetchApproved());
+}
+
+// On page load
+if (!token) {
+    showLogin();
+} else {
+    showPanel();
+    fetchPending();
+    fetchApproved();
+}
+</script>
+</body>
+</html>
